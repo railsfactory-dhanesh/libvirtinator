@@ -1,0 +1,8 @@
+#!/bin/bash
+
+# Delete the ubuntu user's password
+passwd -d ubuntu
+
+# Regenerate ssh keys
+rm /etc/ssh/ssh_host*key*
+dpkg-reconfigure -fnoninteractive -pcritical openssh-server

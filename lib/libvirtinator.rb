@@ -1,0 +1,5 @@
+load 'libvirtinator/config.rb'
+load 'libvirtinator/vm.rb'
+load 'libvirtinator/users.rb'
+load 'libvirtinator/image.rb'
+load 'libvirtinator/lv.rb'
