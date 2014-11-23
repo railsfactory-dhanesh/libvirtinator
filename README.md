@@ -1,6 +1,8 @@
 libvirtinator
 ============
 
+* this is an incomplete work in progress
+
 *Opinionatedly Deploy libvirt VM instances.*
 
 This is a Capistrano 3.x plugin, and relies on SSH access with passwordless sudo rights.
