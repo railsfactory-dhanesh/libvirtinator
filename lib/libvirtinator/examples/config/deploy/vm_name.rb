@@ -21,8 +21,8 @@ set :data_disk_partition,   "0" # set to "0" for none (normal), set to 1 for leg
 set :memory_gb,             "2"
 set :cpus,                  "4"
 
-set :cidr,                  "78_137_162_192-27"
-set :ip,                    "78.137.162.206"
+set :cidr,                  "123_123_123_123-27"
+set :ip,                    "123.123.123.123"
 
 set :node_fqdn,             "#{fetch(:stage)}.example.com"
 set :app_fqdn,              "my-app.example.com"
