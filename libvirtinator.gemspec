@@ -16,6 +16,7 @@ Gem::Specification.new do |s|
     "lib/libvirtinator/examples/Capfile",
     "lib/libvirtinator/examples/config/deploy.rb",
     "lib/libvirtinator/examples/config/deploy/vm_name.rb",
+    "lib/libvirtinator/examples/config/sysadmins_keys.rb",
     "lib/libvirtinator/examples/first_boot.sh.erb",
     "lib/libvirtinator/examples/fstab.erb",
     "lib/libvirtinator/examples/hostname.erb",

@@ -19,25 +19,25 @@
     <emulator>/usr/bin/kvm</emulator>
     <disk type='file' device='disk'>
       <driver name='qemu' type='qcow2'/>
-      <source file='<%= @root_partitions_path + "/" + @node_name + "-root.qcow2" %>'/>
+      <source file='<%= @root_image_path %>'/>
       <target dev='vda' bus='virtio'/>
     </disk>
-    <% if @data_disk_gb != "0" -%>
-      <% if @data_disk_type == "lv" -%>
+    <% if @data_disk_enabled %>
+      <% if @data_disk_type == "lv" %>
     <disk type='file' device='disk'>
       <driver name='qemu' type='raw'/>
-      <source file='<%= @data_vg_path + "/" + @node_name %>-data'/>
+      <source file='<%= @data_disk_lv_path %>'/>
       <target dev='vdb' bus='virtio'/>
     </disk>
-      <% end -%>
-      <% if @data_disk_type == "qemu" -%>
+      <% end %>
+      <% if @data_disk_type == "qemu" %>
     <disk type='file' device='disk'>
       <driver name='qemu' type='qcow2'/>
-      <source file='<%= @root_partitions_path + "/" + @node_name %>-data.qcow2'/>
+      <source file='<%= @data_disk_qemu_path %>'/>
       <target dev='vdb' bus='virtio'/>
     </disk>
-      <% end -%>
-    <% end -%>
+      <% end %>
+    <% end %>
     <interface type='bridge'>
       <source bridge='<%= @bridge %>'/>
       <model type='virtio'/>

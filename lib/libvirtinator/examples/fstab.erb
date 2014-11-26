@@ -3,6 +3,6 @@
 proc            /proc         proc    defaults  0     0
 /dev/vda1       /             ext4    defaults  0     0
 /dev/vda2       swap          swap    defaults  0     0
-<% if @data_disk_gb.to_s != "0" -%>
+<% if @data_disk_enabled %>
 /dev/vdb<%= @data_disk_partition unless @data_disk_partition == "0" %>        <%= @data_disk_mount_point %>         ext4    defaults  0     2
-<% end -%>
+<% end %>

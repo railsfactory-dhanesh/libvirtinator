@@ -1,10 +1,37 @@
-# vim: set filetype=ruby :
-require 'rubygems'
-
 require 'socket'
 require 'timeout'
+require 'erb'
 
 namespace :vm do
+  desc "Check the current status of a VM"
+  task :status do
+    on roles(:app) do
+      as :root do
+        if test("virsh", "list", "--all", "|", "grep", "-q", "#{fetch(:node_name)}")
+          if test("virsh", "list", "|", "grep", "-q", "#{fetch(:node_name)}")
+            info "VM #{fetch(:node_name)} exists and is running on #{host}"
+          else
+            info "VM #{fetch(:node_name)} is defined but not running on #{host}"
+          end
+        else
+          info "VM #{fetch(:node_name)} is undefined on #{host}"
+        end
+        if system "bash -c \"ping -c 3 -w 5 #{fetch(:ip)} &> /dev/null\""
+          begin
+            Timeout::timeout(5) do
+              (TCPSocket.open(fetch(:ip),22) rescue nil)
+              info "The IP #{fetch(:ip)} is responding to ping and SSH"
+            end
+          rescue TimeoutError
+            info "The IP #{fetch(:ip)} is responding to ping but not SSH"
+          end
+        else
+          info "The IP #{fetch(:ip)} is not responding to ping"
+        end
+      end
+    end
+  end
+
   desc "Start a copy-on-write Virtual Machine from a base image."
   task :start do
     on roles(:app) do
@@ -18,10 +45,10 @@ namespace :vm do
       Rake::Task['vm:remove_root_image'].invoke
       Rake::Task['vm:create_root_image'].invoke
       begin
-        Rake::Task["img:mount"].invoke
+        Rake::Task["image:mount"].invoke
         Rake::Task['vm:update_root_image'].invoke
       ensure
-        Rake::Task["img:umount"].invoke
+        Rake::Task["image:umount"].invoke
       end
       Rake::Task['vm:create_data'].invoke
       Rake::Task['vm:define_domain'].invoke
@@ -52,9 +79,10 @@ namespace :vm do
         unless test("lsmod | grep -q nbd")
           info 'Running modprobe nbd'
           execute "modprobe", "nbd"
-        end
-        unless test("lsmod | grep -q nbd")
-          fatal "Error: Unable to modprobe nbd!" && raise
+          sleep 0.5
+          unless test("lsmod | grep -q nbd")
+            fatal "Error: Unable to modprobe nbd!" && raise
+          end
         end
       end
     end
@@ -86,9 +114,12 @@ namespace :vm do
     on roles(:app) do
       as :root do
         if test("virsh", "list", "--all", "|", "grep", "-q", "#{fetch(:node_name)}")
-          ask :yes_or_no, "The VM #{fetch(:node_name)} is defined but not running! Do you want to undefine/redefine it?"
+          set :yes_or_no, ""
+          until fetch(:yes_or_no).chomp.downcase == "yes" or fetch(:yes_or_no).chomp.downcase == "no"
+            ask :yes_or_no, "The VM #{fetch(:node_name)} is defined but not running! Do you want to undefine/redefine it?"
+          end
           unless fetch(:yes_or_no).chomp.downcase == "yes"
-            raise
+            exit
           else
             execute "virsh", "undefine", fetch(:node_name)
           end
@@ -114,7 +145,10 @@ namespace :vm do
         # use 'cap <server> create recreate_root=true' to recreate the root image
         if ENV['recreate_root'] == "true"
           if test "[", "-f", root_image_path, "]"
-            ask :yes_or_no, "Are you sure you want to remove the existing #{root_image_path} file?"
+            set :yes_or_no, ""
+            until fetch(:yes_or_no).chomp.downcase == "yes" or fetch(:yes_or_no).chomp.downcase == "no"
+              ask :yes_or_no, "Are you sure you want to remove the existing #{root_image_path} file?"
+            end
             if fetch(:yes_or_no).chomp.downcase == "yes"
               info "Removing old image"
               execute "rm", root_image_path
@@ -132,11 +166,14 @@ namespace :vm do
           info "Creating new image"
           execute "qemu-img", "create", "-b", fetch(:base_image_path), "-f", "qcow2", fetch(:root_image_path)
         else
-          ask :yes_or_no, "#{fetch(:root_image_path)} already exists, do you want to continue to update it's configuration?"
+          set :yes_or_no, ""
+          until fetch(:yes_or_no).chomp.downcase == "yes" or fetch(:yes_or_no).chomp.downcase == "no"
+            ask :yes_or_no, "#{fetch(:root_image_path)} already exists, do you want to continue to update it's configuration?"
+          end
           if fetch(:yes_or_no).chomp.downcase == "yes"
             info "Updating file on an existing image."
           else
-            raise
+            exit
           end
         end
       end
@@ -146,18 +183,15 @@ namespace :vm do
   task :update_root_image do
     on roles(:app) do
       as :root do
-        # TODO changes this to setup current user for sudo access instead of using root.
         mount_point = fetch(:mount_point)
         raise if mount_point.nil?
-        execute "sed", "-i''", "'/PermitRootLogin/c\PermitRootLogin yes'",
-          "#{mount_point}/etc/ssh/sshd_config"
         set :logs_path,         -> { fetch(:internal_logs_path) }
         @internal_logs_path     = fetch(:logs_path)
         @node_name              = fetch(:node_name)
         @node_fqdn              = fetch(:node_fqdn)
         @app_fqdn               = fetch(:app_fqdn)
         @hostname               = fetch(:hostname)
-        @data_disk_gb           = fetch(:data_disk_gb)
+        @data_disk_enabled      = fetch(:data_disk_enabled)
         @data_disk_partition    = fetch(:data_disk_partition)
         @data_disk_mount_point  = fetch(:data_disk_mount_point)
         @network                = fetch("#{fetch(:cidr)}_network")
@@ -167,32 +201,52 @@ namespace :vm do
         @netmask                = fetch("#{fetch(:cidr)}_netmask")
         @dns_nameservers        = fetch(:dns_nameservers)
         @dns_search             = fetch(:dns_search)
-        [
+        {
           "sudoers-sudo"      => "#{mount_point}/etc/sudoers.d/sudo",
           "hosts"             => "#{mount_point}/etc/hosts",
           "hostname"          => "#{mount_point}/etc/hostname",
           "fstab"             => "#{mount_point}/etc/fstab",
           "interfaces"        => "#{mount_point}/etc/network/interfaces",
-        ].each do |file, path|
-          template = File.new(File.expand_path("./templates/#{file}.erb")).read
+        }.each do |file, path|
+          template = File.new(File.expand_path("./templates/libvirtinator/#{file}.erb")).read
           generated_config_file = ERB.new(template).result(binding)
           upload! StringIO.new(generated_config_file), "/tmp/#{file}.file"
           execute("mv", "/tmp/#{file}.file", path)
           execute("chown", "root:root", path)
         end
+        execute "sed", "-i\"\"", "\"/PermitRootLogin/c\\PermitRootLogin no\"",
+          "#{mount_point}/etc/ssh/sshd_config"
         execute "chmod", "440", "#{mount_point}/etc/sudoers.d/*"
-        execute "echo", "-e", "\"\n#includedir /etc/sudoers.d\n\"", ">>", "#{mount_point}/etc/sudoers"
-        execute "mkdir", "-p", "#{mount_point}/root/.ssh"
-        execute "chmod", "700", "#{mount_point}/root/.ssh"
-        path = ""
-        until File.exists? path and ! File.directory? path
-          ask :path, "Which public key should we install in the root user's authorized_keys file? Specifiy an absolute path:"
+        execute "echo", "-e", "\"\n#includedir /etc/sudoers.d\n\"", ">>",
+          "#{mount_point}/etc/sudoers"
+        user = fetch(:user)
+        begin
+          execute "bash", "-c", "\"for", "m", "in", "'sys'", "'dev'", "'proc';",
+            "do", "mount", "/$m", "#{mount_point}/$m", "-o", "bind;", "done\""
+          execute "chroot", mount_point, "/bin/bash", "-c",
+            "\"if", "!", "id", user, "&>", "/dev/null;", "then",
+            "useradd", "--user-group", "--shell",
+            "/bin/bash", "--create-home", "#{user};", "fi\""
+          execute "chroot", mount_point, "/bin/bash", "-c",
+            "\"usermod", "-a", "-G", "sudo", "#{user}\""
+          execute "mkdir", "-p", "#{mount_point}/home/#{user}/.ssh"
+          execute "chroot", mount_point, "/bin/bash", "-c",
+            "\"chown", "#{user}:#{user}", "/home/#{user}", "/home/#{user}/.ssh\""
+          execute "chmod", "700", "#{mount_point}/home/#{user}/.ssh"
+          set :path, ""
+          until File.exists? fetch(:path) and ! File.directory? fetch(:path)
+            ask :path, "Which public key should we install in #{user}'s authorized_keys file? Specifiy an absolute path"
+          end
+          upload! File.open(fetch(:path)), "/tmp/pubkeys"
+          execute "mv", "/tmp/pubkeys", "#{mount_point}/home/#{user}/.ssh/authorized_keys"
+          execute "chroot", mount_point, "/bin/bash", "-c",
+            "\"chown", "#{user}:#{user}", "/home/#{user}/.ssh/authorized_keys\""
+          execute "chmod", "600", "#{mount_point}/home/#{user}/.ssh/authorized_keys"
+          execute "mkdir", "-p", "#{mount_point}#{fetch(:data_disk_mount_point)}" if fetch(:data_disk_enabled)
+        ensure
+          execute "bash", "-c", "\"for", "m", "in", "'sys'", "'dev'", "'proc';",
+          "do", "umount", "#{mount_point}/$m;", "done\""
         end
-        upload! File.open(fetch(:path)), "/tmp/pubkeys"
-        execute "mv", "/tmp/pubkeys", "#{mount_point}/root/.ssh/authorized_keys"
-        execute("chown", "root:root", "#{mount_point}/root/.ssh/authorized_keys")
-        execute "chmod", "600", "#{mount_point}/root/.ssh/authorized_keys"
-        execute "mkdir", "-p", "#{mount_point}/#{fetch(:data_disk_mount_point)}" unless data_disk_gb == "0"
       end
     end
   end
@@ -200,35 +254,31 @@ namespace :vm do
   task :create_data do
     on roles(:app) do
       as 'root' do
-        vg_path = fetch(:data_vg_path)
-        lv_name = "#{fetch(:node_name)}-data"
-        lv_path = "#{vg_path}/#{lv_name}"
-        size_gb = fetch(:data_disk_db)
-        if size_gb == "0"
+        unless fetch(:data_disk_enabled)
           info "Not using a separate data disk."
-          return
+          break
         end
         if fetch(:data_disk_type) == "qemu"
-          if ! test("[", "-f", "#{fetch(:root_partitions_path)}/#{fetch(:node_name)}-data.qcow2", "]") or ENV['recreate_data'] == "true"
+          if ! test("[", "-f", fetch(:data_disk_qemu_path), "]") or ENV['recreate_data'] == "true"
             execute "guestfish", "--new", "disk:#{fetch(:data_disk_gb)}G << _EOF_
   mkfs ext4 /dev/vda
   _EOF_"
             execute "qemu-img", "convert", "-O", "qcow2", "test1.img", "test1.qcow2"
             execute "rm", "test1.img"
-            execute "mv", "test1.qcow2", "#{fetch(:root_partitions_path)}/#{fetch(:node_name)}-data.qcow2"
+            execute "mv", "test1.qcow2", fetch(:data_disk_qemu_path)
           end
         elsif fetch(:data_disk_type) == "lv"
           if ENV['recreate_data'] == "true"
-            if test "[", "-f", lv_path, "]"
-              Rake::Task['lv:recreate'].invoke(vg_path, lv_name, size_gb)
+            if test "[", "-b", fetch(:data_disk_lv_path), "]"
+              Rake::Task['lv:recreate'].invoke
             else
-              Rake::Task['lv:create'].invoke(vg_path, lv_name, size_gb)
+              Rake::Task['lv:create'].invoke
             end
           else
-            if test "[", "-f", lv_path, "]"
-              info "Found and using existing logical volume #{lv_path}"
+            if test "[", "-b", fetch(:data_disk_lv_path), "]"
+              info "Found and using existing logical volume #{fetch(:data_disk_lv_path)}"
             else
-              Rake::Task['lv:create'].invoke(vg_path, lv_name, size_gb)
+              Rake::Task['lv:create'].invoke
             end
           end
         else
@@ -247,12 +297,13 @@ namespace :vm do
         @node_name              = fetch(:node_name)
         @memory_gb              = fetch(:memory_gb).to_i * 1024 * 1024
         @cpus                   = fetch(:cpus)
-        @root_partitions_path   = fetch(:root_partitions_path)
-        @data_disk_gb           = fetch(:data_disk_gb)
+        @root_image_path        = fetch(:root_image_path)
+        @data_disk_enabled      = fetch(:data_disk_enabled)
         @data_disk_type         = fetch(:data_disk_type)
-        @data_vg_path           = fetch(:data_vg_path)
+        @data_disk_lv_path      = fetch(:data_disk_lv_path)
+        @data_disk_qemu_path    = fetch(:data_disk_qemu_path)
         @bridge                 = fetch(:bridge)
-        template = File.new(File.expand_path("templates/server.xml.erb")).read
+        template = File.new(File.expand_path("templates/libvirtinator/server.xml.erb")).read
         generated_config_file = ERB.new(template).result(binding)
         upload! StringIO.new(generated_config_file), "/tmp/server.xml"
         execute "virsh", "define", "/tmp/server.xml"
@@ -293,7 +344,10 @@ namespace :vm do
         end
       rescue Timeout::Error
         puts
-        ask :yes_or_no, "Networking on the VM has not come up in 30 seconds, would you like to wait another 30?"
+        set :yes_or_no, ""
+        until fetch(:yes_or_no).chomp.downcase == "yes" or fetch(:yes_or_no).chomp.downcase == "no"
+          ask :yes_or_no, "Networking on the VM has not come up in 30 seconds, would you like to wait another 30?"
+        end
         if fetch(:yes_or_no).chomp.downcase == "yes"
           Rake::Task['vm:wait_for_ping'].reenable
           return Rake::Task['vm:wait_for_ping'].invoke
@@ -339,7 +393,10 @@ Host #{fetch(:node_name)}
           (print "..."; sleep 3) until (TCPSocket.open(fetch(:ip),22) rescue nil)
         end
       rescue TimeoutError
-        ask :yes_or_no, "SSH on the VM has not come up in 30 seconds, would you like to wait another 30?"
+        set :yes_or_no, ""
+        until fetch(:yes_or_no).chomp.downcase == "yes" or fetch(:yes_or_no).chomp.downcase == "no"
+          ask :yes_or_no, "SSH on the VM has not come up in 30 seconds, would you like to wait another 30?"
+        end
         if fetch(:yes_or_no).chomp.downcase == "yes"
           Rake::Task['vm:wait_for_ssh_alive'].reenable
           return Rake::Task['vm:wait_for_ssh_alive'].invoke

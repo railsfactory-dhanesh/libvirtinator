@@ -21,6 +21,12 @@ This is a Capistrano 3.x plugin, and relies on SSH access with passwordless sudo
 `cap -T` will help remind you of the available commands, see this for more details.
 * 
 
+### TODO:
+Fix needing to define a stage before being able to 'cap libvirtinator:install'
+Test the build_base task.
+Document better.
+
 ###### Debugging:
 * You can add the `--trace` option at the end of a command to see when which tasks are invoked, and when which task is actually executed.
 * If you want to put on your DevOps hat, you can run `cap -T -A` to see each individually available task, and run them one at a time to debug each one.
+

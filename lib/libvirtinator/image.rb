@@ -1,253 +1,185 @@
-# vim: set filetype=ruby :
-require 'rubygems'
-require 'json'
-require 'hashie'
-require 'lockfile'
-
-desc "Build a base qcow2 image."
-task :build_base do
-  on roles(:app) do
-    as :root do
-      ["first_boot.sh", "vmbuilder-init.sh", "vmbuilder.cfg"].each do |file|
-        generated_config_file = generate_config_file("templates/#{file}.erb")
-        upload! StringIO.new(generated_config_file), "/tmp/#{file}"
-        execute("chown", "-R", "root:root", "/tmp/#{file}")
-        execute("chmod", "770", "/tmp/#{file}")
-      end
-      # rootsize & swapsize settings do not get picked up in cfg file, so set here
-      if test fetch(:vmbuilder_run_command)
-        execute "mv /tmp/#{fetch(:release_name)}/*.qcow2 /tmp/#{fetch(:release_name)}/#{fetch(:release_name)}.qcow2"
-        info("Build finished successfully!")
-        info("You probably want to run 'cp /tmp/#{fetch(:release_name)}/#{fetch(:release_name)}.qcow2 <root partitions path>'.")
-        info("If you ran this on a Ubuntu 14.04 or later host, you'll probabaly want to make the image compatible " +
-            "with older versions of qemu using a command like this: 'sudo qemu-img amend -f qcow2 -o compat=0.10 #{fetch(:release_name)}.qcow2'.")
-      end
-      remove_file "/tmp/first_boot.sh"
-    end
-  end
-end
-
-  desc "Mount qcow2 image by creating a run file holding the nbd needed."
-  def mount(vm_dna, host_dna)
-    raise "Need to pass vm_dna!" if vm_dna.empty?
-    raise "Need to pass host_dna!" if host_dna.empty?
-    ensure_nbd_module
-    if nbd_run_file(vm_dna).readable?
-      unless lock_file.exist?
-        unless mount_point(vm_dna, host_dna).mountpoint?
-          say "Removing leftover run file", :red
-          remove_file nbd_run_file(vm_dna)
-          unless nbd_run_file(vm_dna).exist?
-            return mount(vm_dna, host_dna)
-          end
+namespace :image do
+  desc "Build a base qcow2 image."
+  task :build_base do
+    on roles(:app) do
+      as :root do
+        ["first_boot.sh", "vmbuilder-init.sh", "vmbuilder.cfg"].each do |file|
+          template = File.new(File.expand_path("templates/#{file}.erb")).read
+          generated_config_file = ERB.new(template).result(binding)
+          upload! StringIO.new(generated_config_file), "/tmp/#{file}"
+          execute("chown", "-R", "root:root", "/tmp/#{file}")
+          execute("chmod", "770", "/tmp/#{file}")
         end
+        # rootsize & swapsize settings do not get picked up in cfg file, so set here
+        if test "vmbuilder", fetch(:vmbuilder_run_command)
+          execute "mv /tmp/#{fetch(:release_name)}/*.qcow2 /tmp/#{fetch(:release_name)}/#{fetch(:release_name)}.qcow2"
+          info("Build finished successfully!")
+          info("You probably want to run 'cp /tmp/#{fetch(:release_name)}/#{fetch(:release_name)}.qcow2 <root partitions path>'.")
+          info("If you ran this on a Ubuntu 14.04 or later host, you'll probabaly want to make the image compatible " +
+              "with older versions of qemu using a command like this: 'sudo qemu-img amend -f qcow2 -o compat=0.10 #{fetch(:release_name)}.qcow2'.")
+        end
+        execute "rm", "/tmp/first_boot.sh", "-f"
       end
-      raise "nbd run file already exists. is it already connected?"
     end
-    say "Mounting #{root_image(vm_dna, host_dna)} on #{mount_point(vm_dna, host_dna)}", :green
-    until connect_to_unused_nbd(vm_dna, host_dna)
-      say "Trying again...", :green
-    end
-    raise "Mount point #{mount_point(vm_dna, host_dna)} is already mounted" if mount_point(vm_dna, host_dna).mountpoint?
-    empty_directory(mount_point(vm_dna, host_dna))
-    #run "sudo mkdir -p #{mount_point(vm_dna, host_dna)}"
-    run "sudo mount #{dev_nbdp1} #{mount_point(vm_dna, host_dna)}"
-
-    raise "Failed to mount #{mount_point(vm_dna, host_dna)}" unless mount_point(vm_dna, host_dna).mountpoint?
-    say "Mounted #{root_image(vm_dna, host_dna)} on #{mount_point(vm_dna, host_dna)} using #{dev_nbd}", :green
   end
 
-  desc "Invoke thor img:mount, using attributes in a json file that references another json file."
-  def mount_from_file(vm_json_file)
-    raise "Need to pass vm_json_file!" if vm_json_file.empty?
-    vm_dna = load_vm_json_file(vm_json_file)
-    invoke "mount", [vm_dna, load_host_json_file(vm_dna)]
+  #desc "Mount qcow2 image by creating a run file holding the nbd needed."
+  task :mount do
+    on roles(:app) do
+      as :root do
+        if test "[", "-f", fetch(:nbd_run_file), "]"
+          unless test "[", "-f", fetch(:nbd_lock_file), "]"
+            unless test "mountpoint", "-q", fetch(:mount_point)
+              info "Removing leftover run file"
+              execute "rm", fetch(:nbd_run_file), "-f"
+              unless test "[", "-f", fetch(:nbd_run_file), "]"
+                Rake::Task['image:mount'].reenable
+                return Rake::Task['image:mount'].invoke
+              end
+            end
+          end
+          raise "nbd run file already exists. is it already connected?"
+        end
+        info "Mounting #{fetch(:root_image_path)} on #{fetch(:mount_point)}"
+        set :nbd_connected, false
+        until fetch(:nbd_connected)
+          Rake::Task['image:connect_to_unused_nbd'].reenable
+          Rake::Task['image:connect_to_unused_nbd'].invoke
+        end
+        raise "Mount point #{fetch(:mount_point)} is already mounted" if test "mountpoint", "-q", fetch(:mount_point)
+        execute "mkdir", "-p", fetch(:mount_point)
+        execute "mount", fetch(:dev_nbdp1), fetch(:mount_point)
+        raise "Failed to mount #{fetch(:mount_point)}" unless test "mountpoint", "-q", fetch(:mount_point)
+        info "Mounted #{fetch(:root_image_path)} on #{fetch(:mount_point)} using #{fetch(:dev_nbd)}"
+      end
+    end
   end
 
-  desc "Un-mount qcow2 image"
-  def umount(vm_dna, host_dna)
-    raise "Need to pass vm_dna!" if vm_dna.empty?
-    raise "Need to pass host_dna!" if host_dna.empty?
-    ensure_nbd_module
-    if nbd_run_file(vm_dna).readable?
-      say "found #{nbd_run_file(vm_dna)}", :green
-    else
-      say "Unable to read #{nbd_run_file(vm_dna)}", :red
+  #desc "Un-mount qcow2 image"
+  task :umount do
+    on roles(:app) do
+      as :root do
+        if test "[", "-f", fetch(:nbd_run_file), "]"
+          info "found #{fetch(:nbd_run_file)}"
+        else
+          info "Unable to read #{fetch(:nbd_run_file)}"
+        end
+        set :nbd, capture("cat", fetch(:nbd_run_file)).chomp
+        unless test "mountpoint", "-q", fetch(:mount_point)
+          info "#{fetch(:mount_point)} is not mounted"
+        end
+        info "Unmounting root image #{fetch(:root_image_path)}"
+        execute "umount", fetch(:mount_point)
+        if test "mountpoint", "-q", fetch(:mount_point)
+          info "Failed to umount #{fetch(:mount_point)}"
+        end
+        Rake::Task['image:disconnect_from_nbd'].invoke
+        execute "rm", fetch(:mount_point), "-rf"
+        raise "Failed to remove #{fetch(:mount_point)}" if test "[", "-d", fetch(:mount_point), "]"
+      end
     end
-    @nbd = nbd_run_file(vm_dna).read
-    unless mount_point(vm_dna, host_dna).mountpoint?
-      say "#{mount_point(vm_dna, host_dna)} is not mounted", :red
-      return false
-    end
-    say "Unmounting root image #{root_image(vm_dna, host_dna)}"
-    run "umount #{mount_point(vm_dna, host_dna)}"
-    if mount_point(vm_dna, host_dna).mountpoint?
-      say "Failed to umount #{mount_point(vm_dna, host_dna)}", :red
-      return false
-    end
-    disconnect_from_nbd(vm_dna)
-    remove_dir "#{mount_point(vm_dna, host_dna)}"
-    raise "Failed to remove #{mount_point(vm_dna, host_dna)}" if mount_point(vm_dna, host_dna).exist?
-  end
-
-  desc "Invoke thor img:umount, using attributes in a json file that references another json file."
-  def umount_from_file(vm_json_file)
-    raise "Need to pass vm_json_file!" if vm_json_file.empty?
-    vm_dna = load_vm_json_file(vm_json_file)
-    invoke "umount", [vm_dna, load_host_json_file(vm_dna)]
   end
 
   desc "Find the base image for each root qcow2 image."
-  def list_bases(host_dna)
-    raise "Need to pass host_dna!" if host_dna.empty?
-    if `ls #{host_dna.node.root_partitions_path}` =~ /qcow2/
-      files = `ls #{host_dna.node.root_partitions_path}/*.qcow2`.split
-    else
-      say "Error: No qcow2 files found in #{host_dna.node.root_partitions_path}", :red
-      exit
-    end
-    files.each do |image_file|
-      backing_file = ""
-      `qemu-img info #{image_file}`.each_line do |line|
-        if line =~ /backing\ file:/
-          backing_file = line.split[2]
+  task :list_bases do
+    on roles(:app) do
+      as :root do
+        set :files, -> { capture("ls", "#{fetch(:root_partitions_path)}/*.qcow2" ).split }
+        if fetch(:files, "").empty?
+          fatal "Error: No qcow2 files found in #{fetch(:root_partitions_path)}"
+          exit
         end
-      end
-      unless backing_file.empty?
-        say "#{backing_file} < #{image_file}", :green
-      else
-        say "No backing file found for #{image_file}", :yellow
-      end
-    end
-  end
-
-  desc "Invoke thor img:list_bases, using attributes in a json file."
-  def list_bases_file(host_json_file)
-    raise "Need to pass host_json_file!" if host_json_file.empty?
-    invoke "list_bases", [Hashie::Mash.new(JSON.parse(File.read(host_json_file)))]
-  end
-
-
-  private
-    def load_vm_json_file(vm_json_file)
-      raise "Need to pass vm_json_file!" if vm_json_file.empty?
-      Hashie::Mash.new(JSON.parse(File.read(vm_json_file)))
-    end
-
-    def load_host_json_file(vm_dna)
-      raise "Need to pass vm_dna!" if vm_dna.empty?
-      Hashie::Mash.new(JSON.parse(File.read(vm_dna.host_json_file)))
-    end
-
-    def ensure_nbd_module
-      unless system("lsmod | grep -q nbd")
-        say 'Running modprobe nbd', :yellow
-        run "sudo modprobe nbd"
-      end
-      unless system("lsmod | grep -q nbd")
-        say "Error: Unable to modprobe nbd!", :red
-        exit
-      end
-    end
-
-    # Try a random network block device
-    # returning the nbd or false if it is in use
-    def connect_to_unused_nbd(vm_dna, host_dna)
-      raise "Need to pass vm_dna!" if vm_dna.empty?
-      raise "Need to pass host_dna!" if host_dna.empty?
-      raise "Error: #{root_image(vm_dna, host_dna)} not found!" unless root_image(vm_dna, host_dna).exist?
-      begin
-        Lockfile.new("#{lock_file}.prelock", :retries => 0) do
-          @nbd = "nbd#{rand(16)}"
-          say "Checking for qemu-nbd created lock file", :yellow
-          if lock_file.exist?
-            say "#{dev_nbd} lockfile already in place - nbd device may be in use. Trying again...", :red
-            return false
-          end
-          if dev_nbdp1.blockdev?
-            say "nbd device in use but no lockfile, Trying again...", :red
-            return false
-          end
-          say "Found unused block device", :green
-
-          run "sudo qemu-nbd -c #{dev_nbd} #{root_image(vm_dna, host_dna)}"
-          say "Waiting for block device to come online . . . "
-          begin
-            Timeout::timeout(20) do
-              until dev_nbdp1.blockdev?
-                say ". "
-                sleep 0.1
-              end
-              create_file nbd_run_file(vm_dna), @nbd
-              say "device online", :green
+        fetch(:files).each do |image_file|
+          backing_file = ""
+          capture("qemu-img info #{image_file}").each_line do |line|
+            if line =~ /backing\ file:/
+              backing_file = line.split[2]
             end
-          rescue TimeoutError
-            say "Error: unable to create block dev #{dev_nbd}, trying again...", :red
-            return false
-            #raise "unable to create block device #{dev_nbd}"
+          end
+          unless backing_file.empty?
+            info "#{backing_file} < #{image_file}"
+          else
+            info "No backing file found for #{image_file}"
           end
         end
-      rescue Lockfile::MaxTriesLockError => e
-        say "Another process is checking #{nbd}. Trying again...", :red
-        return false
       end
     end
+  end
 
-    def disconnect_from_nbd(vm_dna)
-      raise "Need to pass vm_dna!" if vm_dna.empty?
-      run "sudo qemu-nbd -d #{dev_nbd}"
-      say "Waiting for block device to go offline . . . "
-      begin
-        Timeout::timeout(20) do
-          while dev_nbdp1.blockdev?
-            say ". "
-            sleep 0.1
+  task :connect_to_unused_nbd do
+    on roles(:app) do
+      as :root do
+        set :prelock, -> { "#{fetch(:nbd_lock_file)}.prelock" }
+        begin
+          raise "Error: #{fetch(:root_image_path)} not found!" unless test "[", "-f", fetch(:root_image_path), "]"
+          set :nbd, "nbd#{rand(16)}"
+          info "Randomly trying the #{fetch(:nbd)} network block device"
+          if test "[", "-f", fetch(:prelock), "]"
+            info "Another process is checking #{fetch(:nbd)}. Trying again..."
+            set :nbd_connected, false
+            return
+          else
+            execute "touch", fetch(:prelock)
+            info "Checking for qemu-nbd created lock file"
+            if test "[", "-f", fetch(:nbd_lock_file), "]"
+              info "#{fetch(:dev_nbd)} lockfile already in place - nbd device may be in use. Trying again..."
+              set :nbd_connected, false
+              return
+            end
+            if test "[", "-b", fetch(:dev_nbdp1), "]"
+              info "nbd device in use but no lockfile, Trying again..."
+              set :nbd_connected, false
+              return
+            end
+            info "Found unused block device"
+
+            execute "qemu-nbd", "-c", fetch(:dev_nbd), fetch(:root_image_path)
+            info "Waiting for block device to come online . . . "
+            begin
+              Timeout::timeout(20) do
+                until test "[", "-b", fetch(:dev_nbdp1), "]"
+                  sleep 3
+                end
+                execute "echo", fetch(:nbd), ">", fetch(:nbd_run_file)
+                info "device online"
+                set :nbd_connected, true
+              end
+            rescue TimeoutError
+              fatal "Error: unable to create block dev #{fetch(:dev_nbd)}, trying again..."
+              set :nbd_connected, false
+              return
+              #raise "unable to create block device #{fetch(:dev_nbd)}"
+            end
           end
-          say "block device offline", :green
+        ensure
+          execute "rm", fetch(:prelock), "-f"
         end
-      rescue TimeoutError
-        say "Error: unable to free block dev #{dev_nbd}", :red
-        remove_dir nbd_run_file(vm_dna)
-        create_file lock_file
-        exit 1
       end
-      raise "failed to free #{dev_nbd}" if dev_nbdp1.blockdev?
-      remove_dir nbd_run_file(vm_dna)
     end
+  end
 
-    def root_image(vm_dna, host_dna)
-      raise "Need to pass vm_dna!" if vm_dna.empty?
-      raise "Need to pass host_dna!" if host_dna.empty?
-      Pathname.new "#{host_dna.node.root_partitions_path}/#{vm_dna.node.name}-root.qcow2"
+  task :disconnect_from_nbd do
+    on roles(:app) do
+      as :root do
+        execute "qemu-nbd", "-d", fetch(:dev_nbd)
+        info "Waiting for block device to go offline . . . "
+        begin
+          Timeout::timeout(20) do
+            while test "[", "-b", fetch(:dev_nbdp1), "]"
+              print ". "
+              sleep 3
+            end
+            info "block device offline"
+          end
+        rescue TimeoutError
+          info "Error: unable to free block dev #{fetch(:dev_nbd)}"
+          execute "rm", fetch(:nbd_run_file), "-rf"
+          execute "touch", fetch(:nbd_lock_file)
+          exit 1
+        end
+        raise "failed to free #{fetch(:dev_nbd)}" if test "[", "-b", fetch(:dev_nbdp1), "]"
+        execute "rm", fetch(:nbd_run_file), "-rf"
+      end
     end
-
-    def mount_point(vm_dna, host_dna)
-      raise "Need to pass vm_dna!" if vm_dna.empty?
-      raise "Need to pass host_dna!" if host_dna.empty?
-      Pathname.new "#{host_dna.node.root_partitions_path}/#{vm_dna.node.name}-root.qcow2_mnt"
-    end
-
-    def lock_file
-      Pathname.new "/var/lock/qemu-nbd-#{@nbd}"
-    end
-
-    def dev_nbd
-      Pathname.new "/dev/#{@nbd}"
-    end
-
-    def dev_nbdp1
-      Pathname.new "/dev/#{@nbd}p1"
-    end
-
-    def nbd_run_file(vm_dna)
-      raise "Need to pass vm_dna!" if vm_dna.empty?
-      Pathname.new "/var/lock/#{vm_dna.node.name}.nbd"
-    end
-
-    def generate_config_file(template_file_path)
-      @internal_data_path           = fetch(:data_path)
-      @internal_sites_enabled_path  = fetch(:sites_path)
-      @domain                       = fetch(:cdomain)
-      template_path = File.expand_path(template_file_path)
-      ERB.new(File.new(template_path).read).result(binding)
-    end
+  end
+end
