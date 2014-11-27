@@ -80,7 +80,7 @@ namespace :image do
     end
   end
 
-  desc "Find the base image for each root qcow2 image."
+  desc "Find the base image for each root qcow2 image on the host machine"
   task :list_bases do
     on roles(:app) do
       as :root do

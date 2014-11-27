@@ -1,5 +1,5 @@
 namespace :lv do
-  desc "Remove a logical volume and recreate it."
+  #desc "Remove a logical volume and recreate it."
   task :recreate do
     on roles(:app) do
       as :root do

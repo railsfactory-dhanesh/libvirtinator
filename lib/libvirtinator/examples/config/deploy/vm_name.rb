@@ -1,5 +1,8 @@
 set :host_machine_name,     "my-host"
-set :user,                  -> { ENV['USER'] } # SSH user
+
+# Specify a user with existing SSH access and passwordless sudo rights on the host.
+#   The same user will be setup with SSH access on the VM.
+set :user,                  -> { ENV['USER'] }
 
 role :app,                  "#{fetch(:user)}@#{fetch(:host_machine_name)}.example.com"
 

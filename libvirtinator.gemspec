@@ -1,7 +1,7 @@
 Gem::Specification.new do |s|
   s.name        = 'libvirtinator'
-  s.version     = '0.0.0'
-  s.date        = '2014-11-22'
+  s.version     = '0.0.1'
+  s.date        = '2014-11-26'
   s.summary     = "Deploy libvirt VMs"
   s.description = "An Opinionated libvirt VM Deployment gem"
   s.authors     = ["david amick"]
@@ -27,10 +27,9 @@ Gem::Specification.new do |s|
     "lib/libvirtinator/examples/vmbuilder-init.sh.erb",
     "lib/libvirtinator/examples/vmbuilder.cfg.erb"
   ]
-  s.required_ruby_version  =              '>= 1.9.3'
-  s.requirements           <<             "Docker ~1.3.1"
-  s.add_runtime_dependency 'capistrano',  '= 3.2.1'
-  s.homepage    =
-    'https://github.com/snarlysodboxer/libvirtinator'
-  s.license     = 'GNU'
+  s.required_ruby_version   =   '>= 1.9.3'
+  s.requirements            <<  "Docker ~1.3.1"
+  s.add_runtime_dependency  'capistrano',  '= 3.2.1'
+  s.homepage                =   'https://github.com/snarlysodboxer/libvirtinator'
+  s.license                 =   'GNU'
 end

@@ -14,7 +14,7 @@ namespace :users do
     end
   end
 
-  desc "Idempotently setup unix admin users using SSH with sudo rights."
+  desc "Idempotently setup admin UNIX users."
   task :setup => :load_settings do
     on "#{fetch(:user)}@#{fetch(:ip)}" do
       as :root do
@@ -31,7 +31,7 @@ namespace :users do
               end
             else
               unless test "id", "-u", user['name']
-                exit unless test "adduser", "--disabled-password", "--gecos", "\'\'", user['name']
+                exit unless test "useradd", "--user-group", "--shell", "/bin/bash", "--create-home", user['name']
               end
               execute "usermod", "-s", "'/bin/bash'", user['name']
               user['groups'].each do |group|

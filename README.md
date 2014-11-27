@@ -1,7 +1,7 @@
 libvirtinator
 ============
 
-* this is an incomplete work in progress
+* this is a work in progress
 
 *Opinionatedly Deploy libvirt VM instances.*
 
@@ -19,12 +19,20 @@ This is a Capistrano 3.x plugin, and relies on SSH access with passwordless sudo
 
 ### Usage:
 `cap -T` will help remind you of the available commands, see this for more details.
-* 
+* `cap <vm-name> libvirtinator:install`     # Write example config files *This needs fixed, see below*
+* `cap <vm-name> libvirtinator:install_vm`  # Write an example VM config file *This needs fixed, see below*
+* `cap <vm-name> status`                    # Check the current status of a VM
+* `cap <vm-name> start`                     # Start a copy-on-write VM from a base image
+* `cap <vm-name> users:setup`               # Idempotently setup admin UNIX users
+* `cap <vm-name> image:build_base`          # Build a base qcow2 image
+* `cap <vm-name> image:list_bases`          # Find the base image for each root qcow2 image on the host machine
 
 ### TODO:
-Fix needing to define a stage before being able to 'cap libvirtinator:install'
-Test the build_base task.
-Document better.
+* Fix needing to define and specify a stage before running 'cap libvirtinator:install'.
+* Fix needing to specify a VM (stage) when running 'cap image:list_bases'.
+* Test the build_base task.
+* Setup useful errors/feedback when required variables are unset.
+* Setup better public key getting.
 
 ###### Debugging:
 * You can add the `--trace` option at the end of a command to see when which tasks are invoked, and when which task is actually executed.
