@@ -1,7 +1,7 @@
 Gem::Specification.new do |s|
   s.name        = 'libvirtinator'
-  s.version     = '0.0.1'
-  s.date        = '2014-11-26'
+  s.version     = '0.0.2'
+  s.date        = '2014-12-11'
   s.summary     = "Deploy libvirt VMs"
   s.description = "An Opinionated libvirt VM Deployment gem"
   s.authors     = ["david amick"]
@@ -16,6 +16,7 @@ Gem::Specification.new do |s|
     "lib/libvirtinator/examples/Capfile",
     "lib/libvirtinator/examples/config/deploy.rb",
     "lib/libvirtinator/examples/config/deploy/vm_name.rb",
+    "lib/libvirtinator/examples/config/deploy/manual.rb",
     "lib/libvirtinator/examples/config/sysadmins_keys.rb",
     "lib/libvirtinator/examples/first_boot.sh.erb",
     "lib/libvirtinator/examples/fstab.erb",

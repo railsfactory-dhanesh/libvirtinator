@@ -9,6 +9,7 @@ namespace :libvirtinator do
         'examples/config/deploy.rb'             => 'config/deploy_example.rb',
         'examples/config/sysadmins_keys.rb'     => 'config/sysadmins_keys_example.rb',
         'examples/config/deploy/vm_name.rb'     => 'config/deploy/vm_name_example.rb',
+        'examples/config/deploy/manual.rb'      => 'config/deploy/manual_example.rb',
         'examples/first_boot.sh.erb'            => 'templates/libvirtinator/first_boot_example.sh.erb',
         'examples/fstab.erb'                    => 'templates/libvirtinator/fstab_example.erb',
         'examples/hostname.erb'                 => 'templates/libvirtinator/hostname_example.erb',

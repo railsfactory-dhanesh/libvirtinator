@@ -22,10 +22,13 @@ This is a Capistrano 3.x plugin, and relies on SSH access with passwordless sudo
 * `cap <vm-name> libvirtinator:install`     # Write example config files *This needs fixed, see below*
 * `cap <vm-name> libvirtinator:install_vm`  # Write an example VM config file *This needs fixed, see below*
 * `cap <vm-name> status`                    # Check the current status of a VM
-* `cap <vm-name> start`                     # Start a copy-on-write VM from a base image
-* `cap <vm-name> users:setup`               # Idempotently setup admin UNIX users
+* `cap <vm-name> start`                     # Start a copy-on-write VM from a base image\*
+* `cap <vm-name> users:setup`               # Idempotently setup admin UNIX users\*
+* `cap  manual   users:setup_domain['my_app.example.com','sysadmins']`        # Idempotently setup admin UNIX users using only a domain name (or IP) and a usergroup file\*
 * `cap <vm-name> image:build_base`          # Build a base qcow2 image
 * `cap <vm-name> image:list_bases`          # Find the base image for each root qcow2 image on the host machine
+
+\* With these commands you can add `key_path=/home/<your_username>/.ssh/id_rsa` to the end, this will skip the required interactive question asking for the path to your private key (to be used like 'ssh -i key_path user@my_app.example.com'.)
 
 ### TODO:
 * Fix needing to define and specify a stage before running 'cap libvirtinator:install'.

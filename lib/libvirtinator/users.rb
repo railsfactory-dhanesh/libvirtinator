@@ -1,9 +1,14 @@
 namespace :users do
 
   task :load_settings do
-    set :path, ""
-    until File.exists?(fetch(:path)) and (! File.directory?(fetch(:path)))
-      ask :path, "Which private key has SSH access to the VM? Specifiy an absolute path"
+    if ENV['key_path'].nil?
+      set :path, ""
+      until File.exists?(fetch(:path)) and (! File.directory?(fetch(:path)))
+        ask :path, "Which private key has SSH access to the VM? Specifiy an absolute path"
+      end
+    else
+      warn "Using #{ENV['key_path']} (passed as an environment variable.)"
+      set :path, ENV['key_path']
     end
     SSHKit::Backend::Netssh.configure do |ssh|
       ssh.ssh_options = {
@@ -14,12 +19,20 @@ namespace :users do
     end
   end
 
+  desc "Idempotently setup admin UNIX users using only a domain name (or IP) and a usergroup file"
+  task :setup_domain, [:domain, :usergroup] do |t, args|
+    set :ip,          -> { args.domain }
+    set :usergroups,  -> { Array(args.usergroup) }
+    Rake::Task['users:setup'].invoke
+  end
+
   desc "Idempotently setup admin UNIX users."
   task :setup => :load_settings do
     on "#{fetch(:user)}@#{fetch(:ip)}" do
       as :root do
         fetch(:usergroups).each do |usergroup|
           usergroup = usergroup.to_sym
+          require "./config/#{usergroup}_keys.rb"
           next if fetch(usergroup).nil? or fetch(usergroup).empty?
           fetch(usergroup).each do |user|
             key_file = "/home/#{user['name']}/.ssh/authorized_keys"

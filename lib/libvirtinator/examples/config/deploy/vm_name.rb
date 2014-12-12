@@ -26,6 +26,3 @@ set :app_fqdn,              "my-app.example.com"
 set :hostname,              "my-app"
 
 set :usergroups,            ["sysadmins"]
-fetch(:usergroups).each do |usergroup|
-  require "./config/#{usergroup}_keys.rb"
-end
