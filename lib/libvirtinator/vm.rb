@@ -3,7 +3,7 @@ require 'timeout'
 require 'erb'
 
 desc "Check the current status of a VM"
-task :status do
+task :status => 'libvirtinator:load_settings' do
   on roles(:app) do
     as :root do
       if test("virsh", "list", "--all", "|", "grep", "-q", "#{fetch(:node_name)}")
@@ -32,7 +32,7 @@ task :status do
 end
 
 desc "Start a copy-on-write VM from a base image."
-task :start do
+task :start => 'libvirtinator:load_settings' do
   on roles(:app) do
     info "Preparing to start #{fetch(:node_name)}"
     Rake::Task['ensure_nbd_module'].invoke
@@ -56,12 +56,14 @@ task :start do
     Rake::Task['setup_agent_forwarding'].invoke
     Rake::Task['wait_for_ping'].invoke
     Rake::Task['wait_for_ssh_alive'].invoke
+    # TODO make users:setup offer a yes/no try-again when a specified key doesn't work to connect.
+    # TODO make users:setup failure invoke notice "don't worry, you can resume setting up users with 'cap <stage> users:setup'"
     Rake::Task['users:setup'].invoke
     info "Say, you don't say? Are we finished?"
   end
 end
 
-task :ensure_root_partitions_path do
+task :ensure_root_partitions_path => 'libvirtinator:load_settings' do
   on roles(:app) do
     as :root do
       dir = fetch(:root_partitions_path)
@@ -73,7 +75,7 @@ task :ensure_root_partitions_path do
   end
 end
 
-task :ensure_nbd_module do
+task :ensure_nbd_module => 'libvirtinator:load_settings' do
   on roles(:app) do
     as :root do
       unless test("lsmod | grep -q nbd")
@@ -89,7 +91,7 @@ task :ensure_nbd_module do
   end
 end
 
-task :ensure_vm_not_running do
+task :ensure_vm_not_running => 'libvirtinator:load_settings' do
   on roles(:app) do
     as :root do
       if test("virsh", "list", "|", "grep", "-q", "#{fetch(:node_name)}")
@@ -100,7 +102,7 @@ task :ensure_vm_not_running do
   end
 end
 
-task :ensure_ip_no_ping do
+task :ensure_ip_no_ping => 'libvirtinator:load_settings' do
   run_locally do
     info "Attempting to ping #{fetch(:ip)}"
     if system "bash -c \"ping -c 3 -w 5 #{fetch(:ip)} &> /dev/null\""
@@ -112,7 +114,7 @@ task :ensure_ip_no_ping do
   end
 end
 
-task :ensure_vm_not_defined do
+task :ensure_vm_not_defined => 'libvirtinator:load_settings' do
   on roles(:app) do
     as :root do
       if test("virsh", "list", "--all", "|", "grep", "-q", "#{fetch(:node_name)}")
@@ -130,7 +132,7 @@ task :ensure_vm_not_defined do
   end
 end
 
-task :verify_base do
+task :verify_base => 'libvirtinator:load_settings' do
   on roles(:app) do
     as :root do
       unless test "[", "-f", fetch(:base_image_path), "]"
@@ -142,7 +144,7 @@ task :verify_base do
   end
 end
 
-task :remove_root_image do
+task :remove_root_image => 'libvirtinator:load_settings' do
   on roles(:app) do
     as :root do
       # use 'cap <server> create recreate_root=true' to recreate the root image
@@ -162,7 +164,7 @@ task :remove_root_image do
   end
 end
 
-task :create_root_image do
+task :create_root_image => 'libvirtinator:load_settings' do
   on roles(:app) do
     as :root do
       unless test "[", "-f", fetch(:root_image_path), "]"
@@ -183,7 +185,7 @@ task :create_root_image do
   end
 end
 
-task :update_root_image do
+task :update_root_image => 'libvirtinator:load_settings' do
   on roles(:app) do
     as :root do
       mount_point = fetch(:mount_point)
@@ -216,6 +218,7 @@ task :update_root_image do
         upload! StringIO.new(generated_config_file), "/tmp/#{file}.file"
         execute("mv", "/tmp/#{file}.file", path)
         execute("chown", "root:root", path)
+        execute("chmod", "644", path)
       end
       execute "sed", "-i\"\"", "\"/PermitRootLogin/c\\PermitRootLogin no\"",
         "#{mount_point}/etc/ssh/sshd_config"
@@ -254,7 +257,7 @@ task :update_root_image do
   end
 end
 
-task :create_data do
+task :create_data => 'libvirtinator:load_settings' do
   on roles(:app) do
     as 'root' do
       unless fetch(:data_disk_enabled)
@@ -293,7 +296,7 @@ _EOF_"
   end
 end
 
-task :define_domain do
+task :define_domain => 'libvirtinator:load_settings' do
   on roles(:app) do
     as 'root' do
       # instance variables needed for ERB
@@ -315,7 +318,7 @@ task :define_domain do
   end
 end
 
-task :start_domain do
+task :start_domain => 'libvirtinator:load_settings' do
   on roles(:app) do
     as 'root' do
       execute "virsh", "start", "#{fetch(:node_name)}"
@@ -324,7 +327,7 @@ task :start_domain do
 end
 
 # Keep this to aid with users setup
-task :reset_known_hosts_on_host do
+task :reset_known_hosts_on_host => 'libvirtinator:load_settings' do
   run_locally do
     user = if ENV['SUDO_USER']; ENV['SUDO_USER']; else; ENV['USER']; end
     execute "sudo", "-u", user, "ssh-keygen", "-R", "#{fetch(:node_name)}"
@@ -335,7 +338,7 @@ task :reset_known_hosts_on_host do
   end
 end
 
-task :wait_for_ping do
+task :wait_for_ping => 'libvirtinator:load_settings' do
   run_locally do
     info "Waiting for VM to respond to ping.."
     begin
@@ -362,7 +365,11 @@ task :wait_for_ping do
   end
 end
 
-task :setup_agent_forwarding do
+# TODO confirm and remove auto-setup of agent forwarding,
+#   not only is this not idempotent (it continually adds to `.ssh/config`),
+#   but it should not be needed, since capistrano forwards the agent automatically.
+#   Manual SSH configuration for agent fowarding should be needed. - Confirm VM creation still work this way.
+task :setup_agent_forwarding => 'libvirtinator:load_settings' do
   run_locally do
     lines = <<-eos
 \nHost #{fetch(:node_fqdn)}
@@ -388,7 +395,7 @@ Host #{fetch(:node_name)}
   end
 end
 
-task :wait_for_ssh_alive do
+task :wait_for_ssh_alive => 'libvirtinator:load_settings' do
   run_locally do
     info "Waiting for VM SSH alive.."
     begin

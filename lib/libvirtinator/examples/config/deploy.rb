@@ -31,19 +31,23 @@ set "231_231_231_231-27_netmask",         "255.255.255.224"
 set :dns_search,                          "example.com example2.com"
 
 # Setup vmbuilder for building a base image
-set :release_name,                        "ubuntu-14.04-v0.0.1-docker1.3.1"
+set :release_name,                        "ubuntu-14.04_docker-1.9.1_v0.0.0"
+set :build_user,                          -> { ENV['USER'] }
+set :build_host,                          "myhost.example.com"
 set :vmbuilder_run_command,               -> {
-  [ "kvm", "ubuntu",
+  # [ "vmbuilder", "kvm", "ubuntu", # Ubuntu 12.04 and older hosts
+  [ "ubuntu-vm-builder", "kvm", "ubuntu", # Ubuntu 14.04 and newer hosts
     "-o",
     "--debug",
     "--verbose",
     "--dest=/tmp/#{fetch(:release_name)}",
-    "--config=templates/#{fetch(:release_name)}.cfg",
-    "--execscript=templates/#{fetch(:release_name)}-init.sh",
+    "--config=/tmp/vmbuilder.cfg",
+    "--execscript=/tmp/vmbuilder-init.sh",
     "--firstboot=/tmp/first_boot.sh",
+    # rootsize & swapsize settings do not get picked up in cfg file, so set here
     "--rootsize=15360",
     "--swapsize=2048"
-  ].join(' ')
+  ]
 }
 
 

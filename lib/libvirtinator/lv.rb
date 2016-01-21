@@ -1,6 +1,6 @@
 namespace :lv do
   #desc "Remove a logical volume and recreate it."
-  task :recreate do
+  task :recreate => 'libvirtinator:load_settings' do
     on roles(:app) do
       as :root do
         if test "[", "-b", fetch(:data_disk_lv_path), "]"
@@ -18,7 +18,7 @@ namespace :lv do
   end
 
   #desc "Create a logical volume."
-  task :create do
+  task :create => 'libvirtinator:load_settings' do
     on roles(:app) do
       as :root do
         if test "lvcreate", fetch(:data_disk_vg_path), "-L", "#{fetch(:data_disk_gb)}G", "-n", fetch(:data_disk_lv_name)
@@ -32,7 +32,7 @@ namespace :lv do
   end
 
   #desc "Create an ext4 filesystem."
-  task :mkfs do
+  task :mkfs => 'libvirtinator:load_settings' do
     on roles(:app) do
       as :root do
         unless test "[", "-b", fetch(:data_disk_lv_path), "]"

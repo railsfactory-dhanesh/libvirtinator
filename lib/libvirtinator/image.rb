@@ -1,30 +1,34 @@
 namespace :image do
   desc "Build a base qcow2 image."
-  task :build_base do
-    on roles(:app) do
+  task :build_base => 'libvirtinator:load_settings' do
+    on "#{fetch(:build_user)}@#{fetch(:build_host)}" do
       as :root do
         ["first_boot.sh", "vmbuilder-init.sh", "vmbuilder.cfg"].each do |file|
-          template = File.new(File.expand_path("templates/#{file}.erb")).read
+          template = File.new(File.expand_path("templates/libvirtinator/#{file}.erb")).read
           generated_config_file = ERB.new(template).result(binding)
           upload! StringIO.new(generated_config_file), "/tmp/#{file}"
-          execute("chown", "-R", "root:root", "/tmp/#{file}")
           execute("chmod", "770", "/tmp/#{file}")
         end
-        # rootsize & swapsize settings do not get picked up in cfg file, so set here
-        if test "vmbuilder", fetch(:vmbuilder_run_command)
-          execute "mv /tmp/#{fetch(:release_name)}/*.qcow2 /tmp/#{fetch(:release_name)}/#{fetch(:release_name)}.qcow2"
+        command_options = fetch(:vmbuilder_run_command)
+        entrypoint = command_options.shift
+        SSHKit.config.output_verbosity = :debug # watch long running output
+        if test entrypoint, command_options
+          final_path = "/tmp/#{fetch(:release_name)}/#{fetch(:release_name)}.qcow2"
+          execute "mv /tmp/#{fetch(:release_name)}/*.qcow2 #{final_path}"
           info("Build finished successfully!")
-          info("You probably want to run 'cp /tmp/#{fetch(:release_name)}/#{fetch(:release_name)}.qcow2 <root partitions path>'.")
-          info("If you ran this on a Ubuntu 14.04 or later host, you'll probabaly want to make the image compatible " +
-              "with older versions of qemu using a command like this: 'sudo qemu-img amend -f qcow2 -o compat=0.10 #{fetch(:release_name)}.qcow2'.")
+          info("You probably want to copy '#{final_path}' to your root partitions path.")
+          info("If you ran this on a Ubuntu 14.04 or later host, you may want to make the image compatible " +
+              "with older versions of qemu using a command like this: 'sudo qemu-img amend -f qcow2 -o compat=0.10 #{final_path}'.")
+        else
+          fatal "Build failed!"
         end
-        execute "rm", "/tmp/first_boot.sh", "-f"
+        SSHKit.config.output_verbosity = fetch(:log_level)
       end
     end
   end
 
   #desc "Mount qcow2 image by creating a run file holding the nbd needed."
-  task :mount do
+  task :mount => 'libvirtinator:load_settings' do
     on roles(:app) do
       as :root do
         if test "[", "-f", fetch(:nbd_run_file), "]"
@@ -56,7 +60,7 @@ namespace :image do
   end
 
   #desc "Un-mount qcow2 image"
-  task :umount do
+  task :umount => 'libvirtinator:load_settings' do
     on roles(:app) do
       as :root do
         if test "[", "-f", fetch(:nbd_run_file), "]"
@@ -81,7 +85,7 @@ namespace :image do
   end
 
   desc "Find the base image for each root qcow2 image on the host machine"
-  task :list_bases do
+  task :list_bases => 'libvirtinator:load_settings' do
     on roles(:app) do
       as :root do
         set :files, -> { capture("ls", "#{fetch(:root_partitions_path)}/*.qcow2" ).split }
@@ -106,7 +110,7 @@ namespace :image do
     end
   end
 
-  task :connect_to_unused_nbd do
+  task :connect_to_unused_nbd => 'libvirtinator:load_settings' do
     on roles(:app) do
       as :root do
         set :prelock, -> { "#{fetch(:nbd_lock_file)}.prelock" }
@@ -158,7 +162,7 @@ namespace :image do
     end
   end
 
-  task :disconnect_from_nbd do
+  task :disconnect_from_nbd => 'libvirtinator:load_settings' do
     on roles(:app) do
       as :root do
         execute "qemu-nbd", "-d", fetch(:dev_nbd)

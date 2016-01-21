@@ -1,7 +1,26 @@
+module Capistrano
+  module TaskEnhancements
+    alias_method :original_default_tasks, :default_tasks
+    def default_tasks
+      original_default_tasks + [
+        "libvirtinator:install",
+        "libvirtinator:install_vm",
+        "image:list_bases",
+        "image:build_base",
+        "users:setup_domain"
+      ]
+    end
+  end
+end
+
 namespace :libvirtinator do
-  # TODO: fix needing to define a stage before being able to install
+  task :load_settings do
+    load "./config/deploy.rb"
+    SSHKit.config.output_verbosity = fetch(:log_level)
+  end
+
   desc 'Write example config files'
-  task :install do
+  task :install => 'libvirtinator:load_settings' do
     run_locally do
       execute "mkdir", "-p", "config/deploy", "templates/libvirtinator"
       {
@@ -9,7 +28,6 @@ namespace :libvirtinator do
         'examples/config/deploy.rb'             => 'config/deploy_example.rb',
         'examples/config/sysadmins_keys.rb'     => 'config/sysadmins_keys_example.rb',
         'examples/config/deploy/vm_name.rb'     => 'config/deploy/vm_name_example.rb',
-        'examples/config/deploy/manual.rb'      => 'config/deploy/manual_example.rb',
         'examples/first_boot.sh.erb'            => 'templates/libvirtinator/first_boot_example.sh.erb',
         'examples/fstab.erb'                    => 'templates/libvirtinator/fstab_example.erb',
         'examples/hostname.erb'                 => 'templates/libvirtinator/hostname_example.erb',
@@ -29,7 +47,7 @@ namespace :libvirtinator do
   end
 
   desc 'Write an example VM config file'
-  task :install_vm do
+  task :install_vm => 'libvirtinator:load_settings' do
     run_locally do
       execute "mkdir", "-p", "config/deploy"
       {

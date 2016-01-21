@@ -22,7 +22,7 @@ set :ip,                    "123.123.123.123"
 set :cidr,                  "123_123_123_123-27"
 
 set :node_fqdn,             -> { "#{fetch(:node_name)}.example.com" }
-set :app_fqdn,              "my-app.example.com"
-set :hostname,              "my-app"
+set :app_fqdn,              -> { "#{fetch(:node_name)}.example.com" }
+set :hostname,              -> { fetch(:node_name) }
 
 set :usergroups,            ["sysadmins"]

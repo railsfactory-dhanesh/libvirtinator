@@ -1,8 +1,6 @@
 libvirtinator
 ============
 
-* this is a work in progress
-
 *Opinionatedly Deploy libvirt VM instances.*
 
 This is a Capistrano 3.x plugin, and relies on SSH access with passwordless sudo rights.
@@ -19,23 +17,29 @@ This is a Capistrano 3.x plugin, and relies on SSH access with passwordless sudo
 
 ### Usage:
 `cap -T` will help remind you of the available commands, see this for more details.
-* `cap <vm-name> libvirtinator:install`     # Write example config files *This needs fixed, see below*
-* `cap <vm-name> libvirtinator:install_vm`  # Write an example VM config file *This needs fixed, see below*
+* `cap libvirtinator:install`               # Write example config files
+* `cap libvirtinator:install_vm`            # Write an example VM config file
 * `cap <vm-name> status`                    # Check the current status of a VM
 * `cap <vm-name> start`                     # Start a copy-on-write VM from a base image\*
 * `cap <vm-name> users:setup`               # Idempotently setup admin UNIX users\*
-* `cap  manual   users:setup_domain['my_app.example.com','sysadmins']`        # Idempotently setup admin UNIX users using only a domain name (or IP) and a usergroup file\*
-* `cap <vm-name> image:build_base`          # Build a base qcow2 image
-* `cap <vm-name> image:list_bases`          # Find the base image for each root qcow2 image on the host machine
+* `cap users:setup_domain domain=example.com usergroups=sysadmins` # Idempotently setup admin UNIX users using only a domain name (or IP) and usergroup files\*
+* `cap image:build_base`                    # Build a base qcow2 image
+* `cap <vm-name> image:list_bases`          # Find the base image for each root qcow2 image on the VM's host machine
 
 \* With these commands you can add `key_path=/home/<your_username>/.ssh/id_rsa` to the end, this will skip the required interactive question asking for the path to your private key (to be used like 'ssh -i key_path user@my_app.example.com'.)
 
 ### TODO:
-* Fix needing to define and specify a stage before running 'cap libvirtinator:install'.
-* Fix needing to specify a VM (stage) when running 'cap image:list_bases'.
-* Test the build_base task.
+* Enable environment variable for the public key (currently only have private key)
 * Setup useful errors/feedback when required variables are unset.
 * Setup better public key getting.
+* Add a 'non-interactive=true' switch to all interactive questions
+* Create temp key set each VM creation, install public in VM hang on to private until `users:setup` has been run successfully.
+* Add reminder after setup finishes to `apt-get update && apt-get dist-upgrade`
+* Remove usage of instance variables in .erb files, intead just use `fetch(:var)`
+* Add ability to set filesystem type in each VM config file rather than in the fstab template (don't be locked into ext4)
+* Confirm and remove auto-setup of agent forwarding
+* Make users:setup offer a yes/no try-again when a specified key doesn't work to connect.
+* Make users:setup failure invoke notice "don't worry, you can resume setting up users with 'cap <stage> users:setup'"
 
 ###### Debugging:
 * You can add the `--trace` option at the end of a command to see when which tasks are invoked, and when which task is actually executed.

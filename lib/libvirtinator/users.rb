@@ -1,6 +1,6 @@
 namespace :users do
 
-  task :load_settings do
+  task :load_settings => 'libvirtinator:load_settings' do
     if ENV['key_path'].nil?
       set :path, ""
       until File.exists?(fetch(:path)) and (! File.directory?(fetch(:path)))
@@ -19,15 +19,19 @@ namespace :users do
     end
   end
 
-  desc "Idempotently setup admin UNIX users using only a domain name (or IP) and a usergroup file"
-  task :setup_domain, [:domain, :usergroup] do |t, args|
-    set :ip,          -> { args.domain }
-    set :usergroups,  -> { Array(args.usergroup) }
+  desc "Idempotently setup admin UNIX users using only a domain name (or IP) and usergroups files"
+  task :setup_domain => 'libvirtinator:load_settings' do
+    if ENV['domain'].nil? or ENV['usergroups'].nil?
+      fatal "Please set domain and usergroups like 'cap users:setup_domain domain=example.com usergroups=sysadmins,others'"
+      exit
+    end
+    set :ip,          -> { ENV['domain'] }
+    set :usergroups,  -> { Array(ENV['usergroups'].split',') }
     Rake::Task['users:setup'].invoke
   end
 
   desc "Idempotently setup admin UNIX users."
-  task :setup => :load_settings do
+  task :setup => ['libvirtinator:load_settings', 'users:load_settings'] do
     on "#{fetch(:user)}@#{fetch(:ip)}" do
       as :root do
         fetch(:usergroups).each do |usergroup|
