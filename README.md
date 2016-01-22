@@ -40,6 +40,7 @@ This is a Capistrano 3.x plugin, and relies on SSH access with passwordless sudo
 * Confirm and remove auto-setup of agent forwarding
 * Make users:setup offer a yes/no try-again when a specified key doesn't work to connect.
 * Make users:setup failure invoke notice "don't worry, you can resume setting up users with 'cap <stage> users:setup'"
+* Add a locking mechanism for keeping track of users for a VM, and disabling their accounts when removed from config
 
 ###### Debugging:
 * You can add the `--trace` option at the end of a command to see when which tasks are invoked, and when which task is actually executed.

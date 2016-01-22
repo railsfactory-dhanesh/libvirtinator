@@ -227,8 +227,10 @@ task :update_root_image => 'libvirtinator:load_settings' do
         "#{mount_point}/etc/sudoers"
       user = fetch(:user)
       begin
-        execute "bash", "-c", "\"for", "m", "in", "'sys'", "'dev'", "'proc';",
-          "do", "mount", "/$m", "#{mount_point}/$m", "-o", "bind;", "done\""
+        mounts = ["sys", "dev", "proc"]
+        mounts.each do |mount|
+          execute "mount", "-o", "bind", "/#{mount}", "#{mount_point}/#{mount}"
+        end
         execute "chroot", mount_point, "/bin/bash", "-c",
           "\"if", "!", "id", user, "&>", "/dev/null;", "then",
           "useradd", "--user-group", "--shell",
@@ -250,8 +252,9 @@ task :update_root_image => 'libvirtinator:load_settings' do
         execute "chmod", "600", "#{mount_point}/home/#{user}/.ssh/authorized_keys"
         execute "mkdir", "-p", "#{mount_point}#{fetch(:data_disk_mount_point)}" if fetch(:data_disk_enabled)
       ensure
-        execute "bash", "-c", "\"for", "m", "in", "'sys'", "'dev'", "'proc';",
-        "do", "umount", "#{mount_point}/$m;", "done\""
+        mounts.each do |mount|
+          execute "umount", "#{mount_point}/#{mount}"
+        end
       end
     end
   end
