@@ -2,4 +2,5 @@
 
 chroot $1 apt-key adv --keyserver hkp://p80.pool.sks-keyservers.net:80 --recv-keys 58118E89F3A912897C070ADBF76221572C52609D
 chroot $1 sh -c "echo deb https://apt.dockerproject.org/repo ubuntu-trusty main > /etc/apt/sources.list.d/docker.list"
-chroot $1 apt-get update -qq && apt-get install -y docker-engine
+chroot $1 apt-get update -qq
+chroot $1 apt-get install -y docker-engine
