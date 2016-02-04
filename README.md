@@ -29,18 +29,15 @@ This is a Capistrano 3.x plugin, and relies on SSH access with passwordless sudo
 \* With these commands you can add `key_path=/home/<your_username>/.ssh/id_rsa` to the end, this will skip the required interactive question asking for the path to your private key (to be used like 'ssh -i key_path user@my_app.example.com'.)
 
 ### TODO:
-* Enable environment variable for the public key (currently only have private key)
 * Setup useful errors/feedback when required variables are unset.
-* Setup better public key getting.
 * Add a 'non-interactive=true' switch to all interactive questions
-* Create temp key set each VM creation, install public in VM hang on to private until `users:setup` has been run successfully.
 * Add reminder after setup finishes to `apt-get update && apt-get dist-upgrade`
 * Remove usage of instance variables in .erb files, intead just use `fetch(:var)`
 * Add ability to set filesystem type in each VM config file rather than in the fstab template (don't be locked into ext4)
 * Confirm and remove auto-setup of agent forwarding
-* Make users:setup offer a yes/no try-again when a specified key doesn't work to connect.
 * Make users:setup failure invoke notice "don't worry, you can resume setting up users with 'cap <stage> users:setup'"
 * Add a locking mechanism for keeping track of users for a VM, and disabling their accounts when removed from config
+* Fix bug preventing usage on a Mac
 
 ###### Debugging:
 * You can add the `--trace` option at the end of a command to see when which tasks are invoked, and when which task is actually executed.

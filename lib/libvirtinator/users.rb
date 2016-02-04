@@ -1,21 +1,21 @@
 namespace :users do
 
   task :load_settings => 'libvirtinator:load_settings' do
-    if ENV['key_path'].nil?
-      set :path, ""
-      until File.exists?(fetch(:path)) and (! File.directory?(fetch(:path)))
-        ask :path, "Which private key has SSH access to the VM? Specifiy an absolute path"
+    if fetch(:private_key_path).nil?
+      SSHKit::Backend::Netssh.configure do |ssh|
+        ssh.ssh_options = {
+          forward_agent: false,
+          auth_methods: %w(publickey)
+        }
       end
     else
-      warn "Using #{ENV['key_path']} (passed as an environment variable.)"
-      set :path, ENV['key_path']
-    end
-    SSHKit::Backend::Netssh.configure do |ssh|
-      ssh.ssh_options = {
-        keys: fetch(:path),
-        forward_agent: false,
-        auth_methods: %w(publickey)
-      }
+      SSHKit::Backend::Netssh.configure do |ssh|
+        ssh.ssh_options = {
+          keys: fetch(:private_key_path),
+          forward_agent: false,
+          auth_methods: %w(publickey)
+        }
+      end
     end
   end
 
@@ -65,6 +65,11 @@ namespace :users do
             end
           end
         end
+      run_locally do
+        unless fetch(:private_key_path).nil?
+          execute "rm", "-f", "#{fetch(:private_key_path)}*"
+        end
+      end
       info "Finished setting up users"
       end
     end
