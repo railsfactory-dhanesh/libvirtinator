@@ -25,6 +25,7 @@ namespace :users do
       fatal "Please set domain and usergroups like 'cap users:setup_domain domain=example.com usergroups=sysadmins,others'"
       exit
     end
+    set :user,        -> { ENV['USER'] }
     set :ip,          -> { ENV['domain'] }
     set :usergroups,  -> { Array(ENV['usergroups'].split',') }
     Rake::Task['users:setup'].invoke
@@ -52,7 +53,11 @@ namespace :users do
               end
               execute "usermod", "-s", "'/bin/bash'", user['name']
               user['groups'].each do |group|
-                execute "usermod", "-a", "-G", group, user['name']
+                if test "grep", "-q", group, "/etc/group"
+                  execute "usermod", "-a", "-G", group, user['name']
+                else
+                  warn "Not adding user '#{user['name']}' to group '#{group}' because the group doesn't exist"
+                end
               end
               execute "mkdir", "-p", "/home/#{user['name']}/.ssh"
               execute "chown", "#{user['name']}.", "-R", "/home/#{user['name']}"
