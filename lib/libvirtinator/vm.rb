@@ -15,7 +15,7 @@ task :status => 'libvirtinator:load_settings' do
       else
         info "VM #{fetch(:node_name)} is undefined on #{host}"
       end
-      if system "bash -c \"ping -c 3 -w 5 #{fetch(:ip)} &> /dev/null\""
+      if system "bash -c \"ping -c 5 #{fetch(:ip)} &> /dev/null\""
         begin
           Timeout::timeout(5) do
             (TCPSocket.open(fetch(:ip),22) rescue nil)
@@ -105,7 +105,7 @@ end
 task :ensure_ip_no_ping => 'libvirtinator:load_settings' do
   run_locally do
     info "Attempting to ping #{fetch(:ip)}"
-    if system "bash -c \"ping -c 3 -w 5 #{fetch(:ip)} &> /dev/null\""
+    if system "bash -c \"ping -c 5 #{fetch(:ip)} &> /dev/null\""
       fatal "The IP #{fetch(:ip)} is already pingable!"
       exit
     else
@@ -348,7 +348,7 @@ task :wait_for_ping => 'libvirtinator:load_settings' do
     info "Waiting for VM to respond to ping.."
     begin
       Timeout::timeout(30) do
-        until system "bash -c \"ping -c 3 -w 5 #{fetch(:ip)} &> /dev/null\"" do
+        until system "bash -c \"ping -c 5 #{fetch(:ip)} &> /dev/null\"" do
           print ' ...'
         end
         info "Ping alive!"
