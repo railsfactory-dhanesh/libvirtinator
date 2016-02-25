@@ -241,13 +241,11 @@ task :update_root_image => 'libvirtinator:load_settings' do
         execute "chroot", mount_point, "/bin/bash", "-c",
           "\"chown", "#{user}:#{user}", "/home/#{user}", "/home/#{user}/.ssh\""
         execute "chmod", "700", "#{mount_point}/home/#{user}/.ssh"
-        key_name = "temp_key_#{fetch(:stage)}"
-        set :private_key_path, key_name
         run_locally do
-          execute "rm", "-f", key_name
-          execute "ssh-keygen", "-P", "''", "-f", key_name
+          execute "rm", "-f", fetch(:private_key_path)
+          execute "ssh-keygen", "-P", "''", "-f", fetch(:private_key_path)
         end
-        upload! File.open("#{key_name}.pub"), "/tmp/pubkeys"
+        upload! File.open("#{fetch(:private_key_path)}.pub"), "/tmp/pubkeys"
         execute "mv", "/tmp/pubkeys", "#{mount_point}/home/#{user}/.ssh/authorized_keys"
         execute "chroot", mount_point, "/bin/bash", "-c",
           "\"chown", "#{user}:#{user}", "/home/#{user}/.ssh/authorized_keys\""

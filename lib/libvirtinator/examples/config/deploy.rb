@@ -66,4 +66,5 @@ set :data_disk_vg_path,     -> { fetch("#{fetch(:host_machine_name)}_data_disk_v
 set :data_disk_lv_name,     -> { "#{fetch(:node_name)}-data" }
 set :data_disk_lv_path,     -> { "#{fetch(:data_disk_vg_path)}/#{fetch(:data_disk_lv_name)}" }
 set :data_disk_qemu_path,   -> { "#{fetch(:root_partitions_path)}/#{fetch(:node_name)}-data.qcow2" }
+set :private_key_path,      -> { "temp_key_#{fetch(:stage)}" }
 

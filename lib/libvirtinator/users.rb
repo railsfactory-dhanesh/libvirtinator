@@ -1,9 +1,10 @@
 namespace :users do
 
   task :load_settings => 'libvirtinator:load_settings' do
-    if fetch(:private_key_path).nil?
+    if File.exists? fetch(:private_key_path)
       SSHKit::Backend::Netssh.configure do |ssh|
         ssh.ssh_options = {
+          keys: fetch(:private_key_path),
           forward_agent: false,
           auth_methods: %w(publickey)
         }
@@ -11,7 +12,6 @@ namespace :users do
     else
       SSHKit::Backend::Netssh.configure do |ssh|
         ssh.ssh_options = {
-          keys: fetch(:private_key_path),
           forward_agent: false,
           auth_methods: %w(publickey)
         }
@@ -71,7 +71,7 @@ namespace :users do
           end
         end
       run_locally do
-        unless fetch(:private_key_path).nil?
+        if File.exists? fetch(:private_key_path)
           execute "rm", "-f", "#{fetch(:private_key_path)}*"
         end
       end

@@ -1,7 +1,7 @@
 Gem::Specification.new do |s|
   s.name        = 'libvirtinator'
-  s.version     = '0.1.4'
-  s.date        = '2016-02-12'
+  s.version     = '0.1.5'
+  s.date        = '2016-02-25'
   s.summary     = "Deploy libvirt VMs"
   s.description = "An Opinionated libvirt VM Deployment gem"
   s.authors     = ["david amick"]
@@ -29,6 +29,7 @@ Gem::Specification.new do |s|
   ]
   s.required_ruby_version   =   '>= 1.9.3'
   s.add_runtime_dependency  'capistrano',  '~> 3.2.1'
+  s.add_runtime_dependency  'net-ssh',     '~> 2.9.1'
   s.homepage                =   'https://github.com/snarlysodboxer/libvirtinator'
   s.license                 =   'GNU'
 end
