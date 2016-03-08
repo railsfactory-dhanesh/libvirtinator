@@ -1,7 +1,7 @@
 Gem::Specification.new do |s|
   s.name        = 'libvirtinator'
-  s.version     = '0.1.5'
-  s.date        = '2016-02-25'
+  s.version     = '0.1.6'
+  s.date        = '2016-03-07'
   s.summary     = "Deploy libvirt VMs"
   s.description = "An Opinionated libvirt VM Deployment gem"
   s.authors     = ["david amick"]

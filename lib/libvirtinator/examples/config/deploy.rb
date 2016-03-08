@@ -53,9 +53,6 @@ set :vmbuilder_run_command,               -> {
 
 ## Settings that shouldn't need changed:
 set :nbd_run_file,          -> { "/var/lock/#{fetch(:node_name)}.nbd" }
-set :nbd_lock_file,         -> { "/var/lock/qemu-nbd-#{fetch(:nbd)}" }
-set :dev_nbd,               -> { "/dev/#{fetch(:nbd)}" }
-set :dev_nbdp1,             -> { "/dev/#{fetch(:nbd)}p1" }
 set :dns_nameservers,       -> { fetch("#{fetch(:host_machine_name)}_dns_nameservers") }
 set :bridge,                -> { fetch("#{fetch(:host_machine_name)}_bridge") }
 set :root_partitions_path,  -> { fetch("#{fetch(:host_machine_name)}_root_partitions_path") }

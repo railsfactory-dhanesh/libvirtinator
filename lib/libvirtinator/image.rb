@@ -1,3 +1,7 @@
+set :nbd_lock_file,         -> { "/var/lock/qemu-nbd-#{fetch(:nbd)}" } # auto-created by qemu-nbd -c
+set :dev_nbd,               -> { "/dev/#{fetch(:nbd)}" }
+set :dev_nbdp1,             -> { "/dev/#{fetch(:nbd)}p1" }
+
 namespace :image do
   desc "Build a base qcow2 image."
   task :build_base => 'libvirtinator:load_settings' do
@@ -32,17 +36,16 @@ namespace :image do
     on roles(:app) do
       as :root do
         if test "[", "-f", fetch(:nbd_run_file), "]"
-          unless test "[", "-f", fetch(:nbd_lock_file), "]"
-            unless test "mountpoint", "-q", fetch(:mount_point)
+          if test "[", "-f", fetch(:nbd_lock_file), "]"
+            raise "nbd run and lock files already exist. Are they already connected?"
+          else
+            if test "mountpoint", "-q", fetch(:mount_point)
+              raise "#{fetch(:mount_point)} is already a mountpoint!"
+            else
               info "Removing leftover run file"
               execute "rm", fetch(:nbd_run_file), "-f"
-              unless test "[", "-f", fetch(:nbd_run_file), "]"
-                Rake::Task['image:mount'].reenable
-                return Rake::Task['image:mount'].invoke
-              end
             end
           end
-          raise "nbd run file already exists. is it already connected?"
         end
         info "Mounting #{fetch(:root_image_path)} on #{fetch(:mount_point)}"
         set :nbd_connected, false
@@ -64,7 +67,7 @@ namespace :image do
     on roles(:app) do
       as :root do
         if test "[", "-f", fetch(:nbd_run_file), "]"
-          info "found #{fetch(:nbd_run_file)}"
+          info "Found #{fetch(:nbd_run_file)}"
         else
           info "Unable to read #{fetch(:nbd_run_file)}"
         end
@@ -113,27 +116,30 @@ namespace :image do
   task :connect_to_unused_nbd => 'libvirtinator:load_settings' do
     on roles(:app) do
       as :root do
-        set :prelock, -> { "#{fetch(:nbd_lock_file)}.prelock" }
+        raise "Error: #{fetch(:root_image_path)} not found!" unless test "[", "-f", fetch(:root_image_path), "]"
         begin
-          raise "Error: #{fetch(:root_image_path)} not found!" unless test "[", "-f", fetch(:root_image_path), "]"
-          set :nbd, "nbd#{rand(16)}"
+          set :nbd, -> { "nbd#{rand(16)}" }
+          set :nbd_lock_file,         -> { "/var/lock/qemu-nbd-#{fetch(:nbd)}" }
+          set :dev_nbd,               -> { "/dev/#{fetch(:nbd)}" }
+          set :dev_nbdp1,             -> { "/dev/#{fetch(:nbd)}p1" }
+          set :prelock,               -> { "#{fetch(:nbd_lock_file)}.prelock" }
           info "Randomly trying the #{fetch(:nbd)} network block device"
           if test "[", "-f", fetch(:prelock), "]"
             info "Another process is checking #{fetch(:nbd)}. Trying again..."
             set :nbd_connected, false
-            return
+            next
           else
             execute "touch", fetch(:prelock)
             info "Checking for qemu-nbd created lock file"
             if test "[", "-f", fetch(:nbd_lock_file), "]"
               info "#{fetch(:dev_nbd)} lockfile already in place - nbd device may be in use. Trying again..."
               set :nbd_connected, false
-              return
+              next
             end
             if test "[", "-b", fetch(:dev_nbdp1), "]"
               info "nbd device in use but no lockfile, Trying again..."
               set :nbd_connected, false
-              return
+              next
             end
             info "Found unused block device"
 
@@ -151,7 +157,7 @@ namespace :image do
             rescue TimeoutError
               fatal "Error: unable to create block dev #{fetch(:dev_nbd)}, trying again..."
               set :nbd_connected, false
-              return
+              next
               #raise "unable to create block device #{fetch(:dev_nbd)}"
             end
           end
