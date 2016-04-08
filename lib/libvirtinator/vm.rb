@@ -2,6 +2,25 @@ require 'socket'
 require 'timeout'
 require 'erb'
 
+desc "Run any Capistrano task on all the machines in 'config/deploy/*' one at a time; Usage: `cap all_do task='uptime'`"
+task :all_do do
+  run_locally do
+    tsk = ENV['task']
+    if tsk.nil? or tsk.empty?
+      fatal "task is unset, try `cap all_do task=\"uptime\"`"
+      next
+    end
+    exec("for machine in $(ls config/deploy/ | cut -c 1-7); do bundle exec cap $machine #{tsk}; if ! [ $? -eq 0 ]; then touch $machine.fail; fi; done")
+  end
+end
+
+desc "Run the uptime command on the VM"
+task :uptime do
+  on "#{fetch(:user)}@#{fetch(:app_fqdn)}" do
+    info("#{capture("uptime")} - on #{fetch(:app_fqdn)}")
+  end
+end
+
 desc "Check the current status of a VM"
 task :status => 'libvirtinator:load_settings' do
   on roles(:app) do
@@ -58,6 +77,7 @@ task :start => 'libvirtinator:load_settings' do
     Rake::Task['wait_for_ssh_alive'].invoke
     # TODO make users:setup offer a yes/no try-again when a specified key doesn't work to connect.
     # TODO make users:setup failure invoke notice "don't worry, you can resume setting up users with 'cap <stage> users:setup'"
+    sleep 2 # wait for SSH to finish booting
     Rake::Task['users:setup'].invoke
     info "Say, you don't say? Are we finished?"
   end

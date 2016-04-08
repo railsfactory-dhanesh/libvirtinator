@@ -7,7 +7,8 @@ module Capistrano
         "libvirtinator:install_vm",
         "image:list_bases",
         "image:build_base",
-        "users:setup_domain"
+        "users:setup_domain",
+        "all_do"
       ]
     end
   end
@@ -15,7 +16,6 @@ end
 
 namespace :libvirtinator do
   task :load_settings do
-    # load "./config/deploy.rb" # this seems unneeded and to cause tasks to run twice, previously i thought it was needed
     SSHKit.config.output_verbosity = fetch(:log_level)
   end
 
