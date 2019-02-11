@@ -332,6 +332,14 @@ task :define_domain => 'libvirtinator:load_settings' do
       @data_disk_lv_path      = fetch(:data_disk_lv_path)
       @data_disk_qemu_path    = fetch(:data_disk_qemu_path)
       @bridge                 = fetch(:bridge)
+      @bridge_1               = fetch(:bridge_1)
+      if (@private_net == true)
+      template = File.new(File.expand_path("templates/libvirtinator/server_private_net.xml.erb")).read
+      generated_config_file = ERB.new(template).result(binding)
+      upload! StringIO.new(generated_config_file), "/tmp/server_private_net.xml"
+      execute "virsh", "define", "/tmp/server_private_net.xml"
+      execute "rm", "/tmp/server_private_net.xml", "-rf"
+      else
       template = File.new(File.expand_path("templates/libvirtinator/server.xml.erb")).read
       generated_config_file = ERB.new(template).result(binding)
       upload! StringIO.new(generated_config_file), "/tmp/server.xml"
